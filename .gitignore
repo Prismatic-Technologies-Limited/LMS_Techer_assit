@@ -1,0 +1,73 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.env
+.venv/
+myvenv/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment variables
+*.env
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+*.hypothesis/
+
+# Logs
+*.log
+logs/
+
+# FAISS index and pickled data
+*.bin
+*.pkl
+*.pickle
+
+# IDE settings
+.vscode/
+.idea/
+*.swp
+
+# macOS / Linux
+.DS_Store
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Local configs
+config.yaml
