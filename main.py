@@ -10,30 +10,29 @@ import json
 app = FastAPI(
     title="Teacher Assistant Chatbot",
     description="A chatbot that assists teachers using their profile information",
-    version="1.0.0"
+    version="1.0.2"
 )
 
 # Pydantic models for request/response
 class ChatRequest(BaseModel):
     message: str
-    instructor_id: Optional[int] = 24775  # Default to the provided ID
+    profile_url: Optional[str] = None  # ✅ Optional full URL
+    instructor_id: Optional[int] = None  # ✅ Optional instructor_id
 
 class ChatResponse(BaseModel):
-    response: str  # Only return chatbot response
+    response: str
 
 # Initialize Groq client
-groq_client = Groq(api_key=os.getenv("GROQ_API_KEY", "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"))
+groq_client = Groq(api_key=os.getenv("GROQ_API_KEY", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"))
 
-# Conversation store (per instructor_id)
-conversations: Dict[int, List[Dict[str, str]]] = {}
+# Conversation store
+conversations: Dict[str, List[Dict[str, str]]] = {}
 
-async def fetch_instructor_profile(instructor_id: int = 24775) -> dict:
-    """Fetch instructor profile from the API endpoint"""
+async def fetch_instructor_profile(profile_url: str) -> dict:
+    """Fetch instructor profile from the given API URL"""
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"https://ace.prismaticcrm.com/api/instructor-profile/{instructor_id}"
-            )
+            response = await client.get(profile_url)
             response.raise_for_status()
             return response.json()
     except httpx.RequestError as e:
@@ -61,21 +60,21 @@ def create_system_prompt(instructor_data: dict) -> str:
     - Keep answers short, professional, and directly based on JSON values.
     """
 
-async def generate_chat_response(message: str, instructor_id: int, instructor_data: dict) -> str:
+async def generate_chat_response(message: str, profile_key: str, instructor_data: dict) -> str:
     """Generate response using Groq API with memory"""
     try:
-        # Initialize conversation for this instructor if not exists
-        if instructor_id not in conversations:
-            conversations[instructor_id] = [
+        # Initialize conversation for this profile if not exists
+        if profile_key not in conversations:
+            conversations[profile_key] = [
                 {"role": "system", "content": create_system_prompt(instructor_data)}
             ]
 
-        # Add user message to conversation
-        conversations[instructor_id].append({"role": "user", "content": message})
+        # Add user message
+        conversations[profile_key].append({"role": "user", "content": message})
 
         # Generate response
         chat_completion = groq_client.chat.completions.create(
-            messages=conversations[instructor_id],
+            messages=conversations[profile_key],
             model="llama-3.3-70b-versatile",
             temperature=0.8,
             max_tokens=100
@@ -83,8 +82,8 @@ async def generate_chat_response(message: str, instructor_id: int, instructor_da
 
         bot_response = chat_completion.choices[0].message.content
 
-        # Add bot response to conversation
-        conversations[instructor_id].append({"role": "assistant", "content": bot_response})
+        # Save assistant response
+        conversations[profile_key].append({"role": "assistant", "content": bot_response})
 
         return bot_response
 
@@ -94,30 +93,32 @@ async def generate_chat_response(message: str, instructor_id: int, instructor_da
 @app.post("/chat", response_model=ChatResponse)
 async def chat_with_teacher_assistant(request: ChatRequest):
     """Main endpoint for chatting with the teacher assistant"""
-    instructor_data = await fetch_instructor_profile(request.instructor_id)
-    bot_response = await generate_chat_response(request.message, request.instructor_id, instructor_data)
-    return ChatResponse(response=bot_response)
 
-@app.get("/instructor/{instructor_id}")
-async def get_instructor_profile(instructor_id: int):
-    """Endpoint to fetch and view instructor profile"""
-    return await fetch_instructor_profile(instructor_id)
+    # ✅ Determine which URL to use
+    if request.profile_url:
+        profile_url = request.profile_url
+    elif request.instructor_id:
+        profile_url = f"https://ace.prismaticcrm.com/api/instructor-profile/{request.instructor_id}"
+    else:
+        raise HTTPException(status_code=400, detail="Either profile_url or instructor_id must be provided")
+
+    instructor_data = await fetch_instructor_profile(profile_url)
+    bot_response = await generate_chat_response(request.message, profile_url, instructor_data)
+
+    return ChatResponse(response=bot_response)
 
 @app.get("/")
 async def root():
-    """Root endpoint with API information"""
     return {
         "message": "Teacher Assistant Chatbot API",
         "endpoints": {
             "POST /chat": "Main chat endpoint - send messages to the teacher assistant",
-            "GET /instructor/{id}": "Get instructor profile information",
             "GET /docs": "Interactive API documentation"
         }
     }
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
     return {"status": "healthy", "service": "teacher-assistant-chatbot"}
 
 if __name__ == "__main__":
